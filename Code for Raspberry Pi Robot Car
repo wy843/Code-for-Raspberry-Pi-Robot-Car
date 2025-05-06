@@ -1,0 +1,279 @@
+# Project Week 1 Code 
+
+import RPi.GPIO as GPIO
+import time
+import math
+
+# Motor GPIO Pin Configuration
+IN1, IN2, ENA = 17, 18, 19  # Left Motor
+IN3, IN4, ENB = 22, 23, 12  # Right Motor
+
+# Encoder GPIO Pins
+ENCODER_A = 21  # Left Wheel Encoder
+ENCODER_B = 20  # Right Wheel Encoder
+
+# Encoder Specifications
+PULSES_PER_REV = 30  # HM encoder pulses per revolution
+WHEEL_DIAMETER = 5.5  # cm (Adjust based on your wheel size)
+WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER  # cm
+
+# Initialize pulse counters
+left_pulse_count = 0
+right_pulse_count = 0
+
+# Setup GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup([IN1, IN2, ENA, IN3, IN4, ENB], GPIO.OUT)
+GPIO.setup([ENCODER_A, ENCODER_B], GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+# PWM Speed Control (0-100)
+pwm_left = GPIO.PWM(ENA, 100)
+pwm_right = GPIO.PWM(ENB, 100)
+pwm_left.start(0)  # 0% speed
+pwm_right.start(0)
+
+def distance_count():
+    start_time = time.time()
+
+    last_state_left = GPIO.input(ENCODER_A)
+    last_state_right = GPIO.input(ENCODER_B)
+
+    global left_pulse_count, right_pulse_count
+
+    while time.time() - start_time <= 1:  # Move for 1 second
+        current_state_left = GPIO.input(ENCODER_A)
+        current_state_right = GPIO.input(ENCODER_B)
+
+        # Detect a state change (falling edge or rising edge)
+        if current_state_left != last_state_left:
+            left_pulse_count += 1
+        if current_state_right != last_state_right:
+            right_pulse_count += 1
+
+        last_state_left = current_state_left
+        last_state_right = current_state_right
+
+    stop()
+
+# Define Movement Functions
+def move_forward():
+    print("Moving Forward")
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.HIGH)
+    GPIO.output(IN4, GPIO.LOW)
+    pwm_left.ChangeDutyCycle(50)
+    pwm_right.ChangeDutyCycle(50)
+    #time.sleep(1)
+    #stop()
+    distance_count()
+
+def move_backward():
+    print("Moving Backward")
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.HIGH)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.HIGH)
+    pwm_left.ChangeDutyCycle(50)
+    pwm_right.ChangeDutyCycle(50)
+    #time.sleep(1)
+    #stop()
+    distance_count()
+
+def turn_left():
+    print("Turning Left")
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.HIGH)
+    GPIO.output(IN3, GPIO.HIGH)
+    GPIO.output(IN4, GPIO.LOW)
+    pwm_left.ChangeDutyCycle(55)
+    pwm_right.ChangeDutyCycle(55)
+    #time.sleep(1)
+    #stop()
+    distance_count()
+
+def turn_right():
+    print("Turning Right")
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.HIGH)
+    pwm_left.ChangeDutyCycle(60)
+    pwm_right.ChangeDutyCycle(60)
+    #time.sleep(1)
+    #stop()
+    distance_count()
+
+def stop():
+    print("Stopping")
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.LOW)
+    
+try:
+    while True:
+        command = input("Enter command (f=forward, b=backward, l=left, r=right, s=stop, q=quit): ").lower()
+        if command == 'f':
+            move_forward()
+        elif command == 'b':
+            move_backward()
+        elif command == 'l':
+            turn_left()
+        elif command == 'r':
+            turn_right()
+        elif command == 's':
+            stop()
+        elif command == 'q':
+            break
+        else:
+            print("Invalid command! Use f, b, l, r, or s.")
+
+        # Calculate distance traveled
+        left_distance = (left_pulse_count / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE
+        right_distance = (right_pulse_count / PULSES_PER_REV) * WHEEL_CIRCUMFERENCE
+        average_distance = (left_distance + right_distance) / 2  # Average distance
+
+        print(f"Left Distance: {left_distance:.2f} cm, Right Distance: {right_distance:.2f} cm, Average: {average_distance:.2f} cm")
+
+except KeyboardInterrupt:
+    print("\nStopping Robot")
+
+finally:
+    stop()
+    GPIO.cleanup()
+[15:54, 01/05/2025] Hui Ling: # Project Week 2 (Line Following under 100 seconds) 
+
+import cv2
+import numpy as np
+import RPi.GPIO as GPIO
+import time
+from picamera2 import Picamera2
+
+# Motor GPIO Pin Configuration
+IN1, IN2, ENA = 17, 18, 19  # Left Motor
+IN3, IN4, ENB = 22, 23, 12  # Right Motor
+
+# Encoder GPIO Pins
+ENCODER_A = 21  # Left Wheel Encoder
+ENCODER_B = 20  # Right Wheel Encoder
+
+# Encoder Specifications
+PULSES_PER_REV = 30  # HM encoder pulses per revolution
+WHEEL_DIAMETER = 5.5  # cm
+WHEEL_CIRCUMFERENCE = np.pi * WHEEL_DIAMETER  # cm
+
+# Servo Motor Pin (PWM)
+SERVO_PIN = 5  
+
+# Setup GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup([IN1, IN2, ENA, IN3, IN4, ENB], GPIO.OUT)
+GPIO.setup([ENCODER_A, ENCODER_B], GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(SERVO_PIN, GPIO.OUT)  # Servo motor pin setup
+
+# PWM Speed Control (0-100)
+pwm_left = GPIO.PWM(ENA, 50)
+pwm_right = GPIO.PWM(ENB, 50)
+pwm_left.start(0)
+pwm_right.start(0)
+
+# Servo PWM (50Hz)
+servo = GPIO.PWM(SERVO_PIN, 30)
+servo.start(0)
+
+# Initialize Pi Camera
+picam2 = Picamera2()
+picam2.preview_configuration.main.size = (640, 240)
+picam2.preview_configuration.main.format = "RGB888"
+picam2.configure("preview")
+picam2.start()
+
+# Timestamp for lost black detection
+time_last_detected = time.time()
+
+def set_servo_angle(angle):
+    """Move the servo to a specific angle."""
+    duty_cycle = 2 + (angle / 18)  # Convert angle (0-180) to duty cycle (2-12)
+    servo.ChangeDutyCycle(duty_cycle)
+
+def set_motors(left_speed, right_speed):
+    """Control the motors based on speed (negative for reverse)."""
+    GPIO.output(IN1, GPIO.HIGH if left_speed >= 0 else GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW if left_speed >= 0 else GPIO.HIGH)
+    GPIO.output(IN3, GPIO.HIGH if right_speed >= 0 else GPIO.LOW)
+    GPIO.output(IN4, GPIO.LOW if right_speed >= 0 else GPIO.HIGH)
+    
+    pwm_left.ChangeDutyCycle(abs(left_speed))
+    pwm_right.ChangeDutyCycle(abs(right_speed))
+
+def stop():
+    """Stop the motors."""
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.LOW)
+
+def process_frame(frame):
+    """Detect and draw green lines at the edges of the black line."""
+    global time_last_detected
+    
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Use Canny edge detection
+    edges = cv2.Canny(blurred, 50, 150)
+    
+    # Focus on bottom half of the frame
+    height, width = edges.shape
+    roi = edges[int(height / 2):, :]
+    
+    # Find non-zero (edge) pixel locations
+    edge_pixels = np.where(roi > 0)
+
+    if len(edge_pixels[1]) > 0:
+        time_last_detected = time.time()  # Reset last detected time
+        left_edge = np.min(edge_pixels[1])  # Leftmost edge
+        right_edge = np.max(edge_pixels[1])  # Rightmost edge
+        center = (left_edge + right_edge) // 2  # Center of detected edges
+
+        # Draw green lines at edges
+        cv2.line(frame, (left_edge, int(height/2)), (left_edge, height), (0, 255, 0), 2)
+        cv2.line(frame, (right_edge, int(height/2)), (right_edge, height), (0, 255, 0), 2)
+        cv2.circle(frame, (center, height - 10), 5, (0, 0, 255), -1)
+
+        # Move robot based on edge position
+        if center < width // 3:
+            set_motors(-50, 50)  # Turn left
+            set_servo_angle(15)  # Move servo left
+        elif center > 2 * width // 3:
+            set_motors(50, -50)  # Turn right
+            set_servo_angle(15)  # Move servo right
+        else:
+            set_motors(50, 50)  # Move forward
+            set_servo_angle(15)  # Keep servo straight
+    
+    else:
+        if time.time() - time_last_detected > 1:  # If no black detected for 1 second
+            set_motors(-20, -20)  # Move backward
+        else:
+            stop()  # Stop if no edges detected and within time threshold
+    
+    cv2.imshow("Edge Detection with Green Lines", frame)
+
+def main():
+    try:
+        while True:
+            frame = picam2.capture_array()
+            process_frame(frame)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to exit
+                break
+    finally:
+        stop()
+        servo.stop()
+        GPIO.cleanup()
+        cv2.destroyAllWindows()
+
+if _name_ == "_main_":
+    main()
