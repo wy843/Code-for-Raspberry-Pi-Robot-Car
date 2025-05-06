@@ -1,0 +1,79 @@
+# Project Week 3 
+
+import cv2
+import numpy as np
+import RPi.GPIO as GPIO
+import time
+import os
+from picamera2 import Picamera2
+import threading
+import queue
+
+# === CONFIGURATION ===
+TEMPLATE_DIR = "/home/powerrangers/template_matching_w3/extra_new_stuff"
+MATCH_THRESHOLD = 0.80
+
+# Shared state
+symbol_detected = False
+symbol_detected_lock = threading.Lock()
+symbol_detected_time = 0
+stopping = False
+frame_queue = queue.Queue(maxsize=1)
+detected_symbol_name = ""
+
+# PID parameters (default values)
+Kp = 1.2
+Ki = 0.0
+Kd = 0.2
+last_error = 0
+integral = 0
+
+# Load templates
+templates = []
+for fname in os.listdir(TEMPLATE_DIR):
+    if fname.endswith(".jpg") or fname.endswith(".png"):
+        label = os.path.splitext(fname)[0]
+        template = cv2.imread(os.path.join(…
+[15:55, 01/05/2025] Hui Ling: # Template Matching - Take Photos 
+
+from picamera2 import Picamera2, Preview
+import cv2
+import time
+import os
+
+# Folder to save images
+save_dir = "/home/powerrangers/template_matching_w3/hi"
+os.makedirs(save_dir, exist_ok=True)
+
+# Initialize camera
+picam2 = Picamera2()
+config = picam2.create_preview_configuration(main={"format": "RGB888", "size": (320, 240)})
+picam2.configure(config)
+picam2.start()
+
+print("Preview started. Press [Enter] to capture a photo.")
+print("Press [Ctrl + C] to exit.")
+
+try:
+    while True:
+        # Capture and show the live frame
+        frame = picam2.capture_array()
+        cv2.imshow("Pi Camera Preview", frame)
+
+        key = cv2.waitKey(1)
+        if key == 13:  # Enter key
+            print("\nEnter a name for the image (without extension): ")
+            file_name = input("> ").strip()
+            if file_name == "":
+                print("Invalid name. Try again.")
+                continue
+            full_path = os.path.join(save_dir, file_name + ".png")
+            cv2.imwrite(full_path, frame)
+            print(f"Image saved as: {full_path}")
+
+except KeyboardInterrupt:
+    print("\nExiting preview...")
+
+finally:
+    picam2.stop()
+    cv2.destroyAllWindows()
