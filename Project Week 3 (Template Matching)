@@ -1,0 +1,70 @@
+from picamera2 import Picamera2
+import cv2
+import numpy as np
+import os
+
+# === CONFIGURATION ===
+TEMPLATE_DIR = "/home/powerrangers/template_matching_w3/cropped_images"  
+MATCH_THRESHOLD = 0.8
+
+# Load all template images
+templates = []
+for fname in os.listdir(TEMPLATE_DIR):
+    if fname.endswith(".jpg") or fname.endswith(".png"):
+        label = os.path.splitext(fname)[0]
+        template = cv2.imread(os.path.join(TEMPLATE_DIR, fname), 0)
+        templates.append((label, template))
+
+# Initialize PiCamera2
+picam2 = Picamera2()
+config = picam2.create_preview_configuration(main={"format": "RGB888", "size": (320, 240)})
+picam2.configure(config)
+picam2.start()
+
+print("Press [q] in the preview window to quit.")
+
+try:
+    while True:
+        # Capture frame from PiCamera2
+        frame = picam2.capture_array()
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        display_frame = frame.copy()
+
+        # Check against all templates
+        for label, template in templates:
+            res = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= MATCH_THRESHOLD)
+
+            for pt in zip(*loc[::-1]):
+                # Draw thinner bounding box
+                cv2.rectangle(display_frame, pt,
+                              (pt[0] + template.shape[1], pt[1] + template.shape[0]),
+                              (0, 255, 0), 1)
+
+                # Prepare label background box
+                label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
+                label_origin = (pt[0], pt[1] - 10)
+
+                # Draw filled rectangle behind text for contrast
+                cv2.rectangle(display_frame,
+                              (label_origin[0], label_origin[1] - label_size[1] - 4),
+                              (label_origin[0] + label_size[0] + 4, label_origin[1] + 2),
+                              (0, 255, 0), cv2.FILLED)
+
+                # Draw text label
+                cv2.putText(display_frame, label,
+                            (label_origin[0] + 2, label_origin[1] - 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
+
+        # Show result
+        cv2.imshow("Template Match (Real-Time)", display_frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+except KeyboardInterrupt:
+    print("Stopped by user.")
+
+finally:
+    picam2.stop()
+    cv2.destroyAllWindows()
